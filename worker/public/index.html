@@ -125,6 +125,17 @@
     }
     input:focus { border-color: var(--signal); box-shadow: 0 0 0 3px rgba(215, 255, 100, .08); }
     input::placeholder { color: #66645c; }
+    textarea { width: 100%; min-height: 96px; padding: 11px 12px; color: var(--text); background: #121210; border: 1px solid var(--line); border-radius: 2px; outline: none; resize: vertical; font: 12px/1.45 var(--mono); }
+    textarea:focus { border-color: var(--signal); box-shadow: 0 0 0 3px rgba(215, 255, 100, .08); }
+    textarea::placeholder { color: #66645c; }
+    .config-import { margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); background: #151512; }
+    .config-import-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+    .config-import-head strong { font-size: 13px; }
+    .config-import-head span { color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; }
+    .config-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .config-import-status { min-height: 18px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .config-import-status.good { color: var(--good); }
+    .config-import-status.bad { color: var(--bad); }
     .form-note { margin-top: 12px; color: var(--muted); font-size: 12px; }
     .input-guide { margin-top: 14px; border: 1px solid var(--line); background: #151512; }
     .input-guide summary { padding: 11px 12px; cursor: pointer; color: var(--signal); font: 11px var(--mono); letter-spacing: .04em; }
@@ -436,6 +447,16 @@
                 <article class="panel">
                   <div class="panel-head"><h2>添加签到账号</h2><span>ENCRYPTED AT REST</span></div>
                   <div class="panel-body">
+                    <div class="config-import">
+                      <div class="config-import-head"><strong>一键导入完整配置</strong><span>PASTE JSON</span></div>
+                      <textarea id="account-import" placeholder="点击“从剪贴板导入”，或把 Edge 扩展复制的完整 JSON 粘贴到这里"></textarea>
+                      <div class="config-import-actions">
+                        <button class="button secondary small" type="button" id="import-account-config">从剪贴板导入</button>
+                        <button class="button secondary small" type="button" id="apply-account-config">应用文本配置</button>
+                        <button class="button secondary small" type="button" id="clear-account-import">清空</button>
+                      </div>
+                      <p id="account-import-status" class="config-import-status">导入后会自动填充下方字段，确认无误后再点击加密保存。</p>
+                    </div>
                     <form id="account-form">
                       <input type="hidden" name="account_id" id="account-id">
                       <div class="form-grid">
@@ -531,6 +552,67 @@
           } catch {
             showToast(`Worker 地址：${location.origin}`);
           }
+        });
+
+        function setImportStatus(message, type = '') {
+          const node = document.querySelector('#account-import-status');
+          node.textContent = message;
+          node.className = 'config-import-status ' + type;
+        }
+
+        function applyImportedConfig(raw) {
+          let config;
+          try {
+            config = JSON.parse(raw);
+          } catch {
+            throw new Error('配置不是有效的 JSON。');
+          }
+
+          const form = document.querySelector('#account-form');
+          const siteUrl = String(config.siteUrl || config.site_url || config.url || '').trim();
+          const userId = String(config.userId || config.user_id || '').trim();
+          const session = String(config.session || config.sessionCookie || config.session_cookie || '').trim();
+          const cfClearance = String(config.cfClearance || config.cf_clearance || '').trim();
+          let name = String(config.name || '').trim();
+
+          if (!siteUrl || !userId || !session) {
+            throw new Error('配置缺少站点地址、用户 ID 或 Session。');
+          }
+          if (!siteUrl.startsWith('http://') && !siteUrl.startsWith('https://')) {
+            throw new Error('站点地址必须以 http:// 或 https:// 开头。');
+          }
+          if (!name) name = new URL(siteUrl).hostname.replace(/^www[.]/i, '');
+
+          form.elements.name.value = name;
+          form.elements.user_id.value = userId;
+          form.elements.url.value = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl;
+          form.elements.session.value = session;
+          form.elements.cf_clearance.value = cfClearance;
+          setImportStatus('已导入并填充表单，请确认内容后点击“加密保存账号”。', 'good');
+        }
+
+        document.querySelector('#import-account-config').addEventListener('click', async () => {
+          try {
+            const raw = await navigator.clipboard.readText();
+            if (!raw.trim()) throw new Error('剪贴板为空。');
+            document.querySelector('#account-import').value = raw;
+            applyImportedConfig(raw);
+          } catch (error) {
+            setImportStatus(error.message || '无法读取剪贴板，请改用“应用文本配置”。', 'bad');
+          }
+        });
+
+        document.querySelector('#apply-account-config').addEventListener('click', () => {
+          try {
+            applyImportedConfig(document.querySelector('#account-import').value.trim());
+          } catch (error) {
+            setImportStatus(error.message || '导入失败。', 'bad');
+          }
+        });
+
+        document.querySelector('#clear-account-import').addEventListener('click', () => {
+          document.querySelector('#account-import').value = '';
+          setImportStatus('已清空导入文本。');
         });
 
         document.querySelector('#account-form').addEventListener('submit', async (event) => {
