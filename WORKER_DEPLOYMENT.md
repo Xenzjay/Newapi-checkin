@@ -43,7 +43,7 @@ graph LR
 ## 2. 准备条件
 
 - Cloudflare 账号
-- GitHub 仓库 `https://github.com/zhikanyeye/Newapi-checkin`
+- GitHub 仓库 `https://github.com/Xenzjay/Newapi-checkin`
 - Node.js 22 或更高版本（仅本地开发需要）
 - Python 3.11（仅本地 Runner 测试需要）
 
@@ -90,7 +90,7 @@ Wrangler 部署前会读取当前 Worker 的远端 Bindings，并按类型与变
 
 ## 4. 配置 Worker 环境变量绑定
 
-Worker 需要三个敏感环境变量和一个普通变量：
+Worker 需要三个敏感环境变量和一个普通变量；要使用控制台内的手动/定时触发，还需要 GitHub Actions 触发配置：
 
 | 变量 | 类型 | 用途 |
 |------|------|------|
@@ -98,6 +98,9 @@ Worker 需要三个敏感环境变量和一个普通变量：
 | `RUNNER_TOKEN` | Secret | GitHub Actions 调用 Runner API 的令牌 |
 | `DATA_ENCRYPTION_KEY` | Secret | 加密账号 Session 的主密钥 |
 | `SESSION_TTL_SECONDS` | Variable | 控制台登录有效期，默认 86400 秒 |
+| `GITHUB_REPOSITORY` | Variable | GitHub 仓库，格式为 `owner/repository` |
+| `GITHUB_ACTIONS_TOKEN` | Secret | 触发该仓库 workflow 的 GitHub Token |
+| `GITHUB_BRANCH` | Variable | 触发分支，默认 `main` |
 
 ### 4.1 生成三个独立凭据
 
@@ -143,7 +146,10 @@ SESSION_TTL_SECONDS = "86400"
 5. 分别添加 `DASHBOARD_PASSWORD`、`RUNNER_TOKEN`、`DATA_ENCRYPTION_KEY`。
 6. 三个敏感变量选择 `Secret` 类型。
 7. 添加普通变量 `SESSION_TTL_SECONDS=86400`。
-8. 保存并重新部署 Worker。
+8. 添加普通变量 `GITHUB_REPOSITORY=Xenzjay/Newapi-checkin`（替换为你的 fork）。
+9. 添加 Secret `GITHUB_ACTIONS_TOKEN`，填写有权触发该仓库 Actions 的 GitHub Personal Access Token。
+10. 可选添加普通变量 `GITHUB_BRANCH=main`。
+11. 保存并重新部署 Worker。
 
 ### 4.4 本地开发绑定
 
@@ -173,8 +179,8 @@ Git 集成会读取仓库中的 `worker/wrangler.toml`。请先完成以下准�
 2. 进入 `Workers & Pages`。
 3. 选择 `Create application`。
 4. 选择 `Import a repository` 或 `Connect to Git`。
-5. 授权 Cloudflare GitHub App 访问 `zhikanyeye/Newapi-checkin`。
-6. 选择仓库 `zhikanyeye/Newapi-checkin`。
+5. 授权 Cloudflare GitHub App 访问 `Xenzjay/Newapi-checkin`。
+6. 选择仓库 `Xenzjay/Newapi-checkin`。
 7. 填写构建设置：
 
 | 设置 | 值 |
@@ -224,6 +230,9 @@ https://newapi-checkin.<你的-workers-subdomain>.workers.dev
 - Secret `RUNNER_TOKEN`
 - Secret `DATA_ENCRYPTION_KEY`
 - Variable `SESSION_TTL_SECONDS=86400`
+- Variable `GITHUB_REPOSITORY=Xenzjay/Newapi-checkin`
+- Secret `GITHUB_ACTIONS_TOKEN`
+- Variable `GITHUB_BRANCH=main`
 
 保存后，在 `Deployments` 页面重新部署最新版本，或者向 `main` 分支推送一次提交。
 
@@ -294,7 +303,9 @@ curl https://newapi-checkin.<你的-workers-subdomain>.workers.dev/api/health
 
 账号字段获取和控制台录入步骤见 [FIRST_RUN.md](FIRST_RUN.md)。完成至少一个账号录入后，再连接 GitHub Actions。
 
-GitHub Actions 只需要两个必填 Secrets：
+GitHub Actions 的 Runner 仍只需要两个必填 Secrets；如果要从 Worker 网页触发 Actions，还要配置上面的 Worker GitHub 变量。
+
+GitHub Actions 需要两个必填 Secrets：
 
 | GitHub Secret | 值 |
 |---------------|----|
@@ -309,6 +320,8 @@ GitHub Actions 只需要两个必填 Secrets：
 4. 添加 `CHECKIN_WORKER_URL`。
 5. 添加 `CHECKIN_RUNNER_TOKEN`。
 6. 可选添加 `DINGTALK_WEBHOOK` 和 `DINGTALK_SECRET`。
+
+GitHub Token 建议使用最小权限的 Fine-grained Personal Access Token，只授予目标仓库的 Actions 工作流运行权限。Token 只保存为 Cloudflare Secret，不要写入仓库、日志或网页。
 
 工作流会将 GitHub Secrets 映射为 Runner 环境变量：
 
