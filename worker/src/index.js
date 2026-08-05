@@ -281,12 +281,30 @@ async function handler(request, env) {
   if (method === 'GET' && path.startsWith('/api/dashboard/runs/')) {
     const id = path.split('/').pop();
     const run = await getDb(env).prepare('SELECT * FROM runs WHERE id = ?').bind(id).first();
-    const results = await getDb(env).prepare('SELECT * FROM run_results WHERE run_id = ? ORDER BY id').bind(id).all();
+    const results = await getDb(env).prepare(`SELECT run_results.*, accounts.url AS account_url
+      FROM run_results LEFT JOIN accounts ON accounts.id = run_results.account_id
+      WHERE run_results.run_id = ? ORDER BY run_results.id`).bind(id).all();
     return json({ run, results: results.results }, 200, env);
   }
   if (method === 'GET' && path === '/api/dashboard/accounts') {
     const rows = await getDb(env).prepare('SELECT * FROM accounts ORDER BY id').all();
     return json({ accounts: rows.results.map(accountView) }, 200, env);
+  }
+  if (method === 'GET' && path.startsWith('/api/dashboard/accounts/')) {
+    const id = path.split('/').pop();
+    const account = await getDb(env).prepare('SELECT * FROM accounts WHERE id = ?').bind(id).first();
+    if (!account) return json({ error: '账号不存在' }, 404, env);
+    const config = JSON.parse(await decrypt(account.secret, env));
+    return json({
+      account: {
+        ...accountView(account),
+        user_id: String(config.user_id || ''),
+        has_session: Boolean(config.session),
+        has_cf_clearance: Boolean(config.cf_clearance),
+        created_at: account.created_at,
+        updated_at: account.updated_at,
+      },
+    }, 200, env);
   }
   if (method === 'POST' && path === '/api/dashboard/accounts') {
     const body = await text(request);
@@ -300,6 +318,16 @@ async function handler(request, env) {
     if (!inserted.meta.changes) return json({ error: '启用账号数量已达到 40 个上限' }, 409, env);
     return json({ ok: true }, 201, env);
   }
+  if (method === 'DELETE' && path.startsWith('/api/dashboard/accounts/')) {
+    const id = path.split('/').pop();
+    const account = await getDb(env).prepare('SELECT id FROM accounts WHERE id = ?').bind(id).first();
+    if (!account) return json({ error: '账号不存在' }, 404, env);
+    await getDb(env).batch([
+      getDb(env).prepare('UPDATE run_results SET account_id = NULL WHERE account_id = ?').bind(id),
+      getDb(env).prepare('DELETE FROM accounts WHERE id = ?').bind(id),
+    ]);
+    return json({ ok: true }, 200, env);
+  }
   if (method === 'PATCH' && path.startsWith('/api/dashboard/accounts/')) {
     const id = path.split('/').pop();
     const body = await text(request);
@@ -309,21 +337,32 @@ async function handler(request, env) {
     if (!account) return json({ error: '账号不存在' }, 404, env);
 
     const updates = [];
-    if (body.session) {
+    const hasClearance = Object.prototype.hasOwnProperty.call(body, 'cf_clearance');
+    const hasCredentialUpdate = Boolean(body.session || body.user_id || body.url || hasClearance);
+    if (hasCredentialUpdate) {
       const current = JSON.parse(await decrypt(account.secret, env));
       const nextUrl = httpsOrigin(body.url || current.url);
       if (!nextUrl) return json({ error: 'URL 必须是有效的 HTTPS Origin' }, 400, env);
-      if (!body.user_id) return json({ error: '更新凭据时必须填写用户 ID' }, 400, env);
+      const nextUserId = String(body.user_id || current.user_id || '').trim();
+      if (!nextUserId) return json({ error: '更新凭据时必须填写用户 ID' }, 400, env);
       const next = {
         ...current,
         url: nextUrl,
-        session: body.session,
+        user_id: nextUserId,
       };
-      next.user_id = body.user_id;
-      if ('cf_clearance' in body) next.cf_clearance = body.cf_clearance || undefined;
+      if (body.session) next.session = String(body.session).trim();
+      if (!next.session) return json({ error: 'Session Cookie 不能为空' }, 400, env);
+      if (hasClearance) {
+        if (body.cf_clearance) next.cf_clearance = String(body.cf_clearance).trim();
+        else delete next.cf_clearance;
+      }
       const secret = await encrypt(JSON.stringify(next), env);
-      updates.push(getDb(env).prepare('UPDATE accounts SET name = ?, url = ?, secret = ?, failure_count = 0, last_status = NULL, last_message = NULL, updated_at = ? WHERE id = ?')
-        .bind(body.name || account.name, nextUrl, secret, now(), id));
+      const resetStatus = body.session ? ', failure_count = 0, last_status = NULL, last_message = NULL' : '';
+      updates.push(getDb(env).prepare(`UPDATE accounts SET name = ?, url = ?, secret = ?${resetStatus}, updated_at = ? WHERE id = ?`)
+        .bind(body.name?.trim() || account.name, nextUrl, secret, now(), id));
+    } else if (typeof body.name === 'string' && body.name.trim()) {
+      updates.push(getDb(env).prepare('UPDATE accounts SET name = ?, updated_at = ? WHERE id = ?')
+        .bind(body.name.trim(), now(), id));
     }
     if (typeof body.enabled === 'boolean') {
       if (body.enabled && !account.enabled) {
@@ -335,8 +374,8 @@ async function handler(request, env) {
       }
     }
 
-    if (typeof body.enabled !== 'boolean' && !body.session) {
-      return json({ error: '请提供 enabled 或新的 Session' }, 400, env);
+    if (!updates.length) {
+      return json({ error: '请提供新的凭据、名称或 enabled' }, 400, env);
     }
     const updated = await getDb(env).batch(updates);
     if (body.enabled === true && !account.enabled && !updated[0].meta.changes) {
