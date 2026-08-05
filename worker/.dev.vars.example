@@ -9,3 +9,11 @@ RUNNER_TOKEN=replace-with-runner-token
 
 # 建议：openssl rand -hex 32；请长期安全备份
 DATA_ENCRYPTION_KEY=replace-with-data-encryption-key
+
+# 用于控制台“立即运行签到”和 Worker Cron 触发 GitHub Actions。
+# 仓库填写你自己的 fork，例如 Xenzjay/Newapi-checkin。
+GITHUB_REPOSITORY=Xenzjay/Newapi-checkin
+# Secret：GitHub Personal Access Token，至少需要 Actions workflow dispatch 权限。
+GITHUB_ACTIONS_TOKEN=replace-with-github-actions-token
+# 可选，默认 main。
+GITHUB_BRANCH=main
