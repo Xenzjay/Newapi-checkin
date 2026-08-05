@@ -87,6 +87,18 @@ openssl rand -hex 32
 | `DINGTALK_WEBHOOK` | 否 | 钉钉机器人 Webhook |
 | `DINGTALK_SECRET` | 否 | 钉钉机器人加签密钥 |
 
+### Worker 触发 GitHub Actions
+
+控制台中的“立即运行签到”和“签到计划与运行”由 Worker 触发 GitHub Actions。请在 Cloudflare Worker 的 `Settings` -> `Variables and Secrets` 中添加：
+
+| Worker 变量 | 类型 | 值 |
+|-------------|------|-----|
+| `GITHUB_REPOSITORY` | Variable | `Xenzjay/Newapi-checkin`（替换为你的仓库） |
+| `GITHUB_ACTIONS_TOKEN` | Secret | 能够触发该仓库 Actions 的 GitHub Personal Access Token |
+| `GITHUB_BRANCH` | Variable | `main` |
+
+如果不添加这三个变量，控制台仍可保存计划和查看日志，但“立即运行签到”会提示未配置触发凭据。Worker Cron 每分钟检查一次计划，在设定时间触发一次 Actions。
+
 ### 登录有效期
 
 `SESSION_TTL_SECONDS=86400` 表示浏览器控制台登录状态有效 24 小时。
@@ -110,7 +122,7 @@ openssl rand -hex 32
 
 | 设置 | 值 |
 |------|----|
-| Repository | `zhikanyeye/Newapi-checkin` |
+| Repository | `Xenzjay/Newapi-checkin` |
 | Production branch | `main` |
 | Root directory | `worker` |
 | Build command | 留空 |
@@ -159,6 +171,12 @@ Cloudflare 会根据仓库中的 `Check` Binding 自动创建并绑定 D1。Work
 | 站点地址 | 是 | NewAPI 根地址，例如 `https://api.example.com` |
 | Session Cookie | 是 | `session` Cookie 的 Value，不包含 `session=` 和分号 |
 | `cf_clearance` | 否 | Cloudflare 挑战站点的辅助 Cookie，通常留空 |
+| 分组 | 否 | 归类同一站点的多个账号或不同使用场景 |
+| 标签 | 否 | 多个标签用逗号分隔，用于交叉筛选 |
+
+### 分组与标签
+
+每个账号可以设置一个分组和多个标签。分组适合表示账号所属的站点/用途集合，例如“code28 生产”“备用站”；标签适合表示可交叉筛选的属性，例如“生产”“个人”“高额度”。账号列表支持按分组下拉筛选和按标签即时筛选，旧账号留空即可继续使用。
 
 ## 安全设计
 
