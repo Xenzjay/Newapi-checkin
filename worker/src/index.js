@@ -17,6 +17,19 @@ function httpsOrigin(value) {
   }
 }
 
+function httpsLoginUrl(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    url.search = '';
+    url.hash = '';
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 function optionalInteger(value) {
   if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
@@ -81,11 +94,144 @@ async function decrypt(value, env) {
 }
 
 function accountView(row) {
+  let tags = [];
+  try {
+    const parsed = JSON.parse(row.tags || '[]');
+    tags = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    tags = [];
+  }
   return {
-    id: row.id, name: row.name, url: row.url, enabled: Boolean(row.enabled),
+    id: row.id, name: row.name, url: row.url, login_url: row.login_url || row.url,
+    group_name: row.group_name || '', tags, enabled: Boolean(row.enabled),
     failure_count: row.failure_count, last_status: row.last_status,
     last_message: row.last_message, last_checkin_at: row.last_checkin_at,
   };
+}
+
+function normalizeGroup(value) {
+  return String(value || '').trim().slice(0, 80);
+}
+
+function normalizeTags(value) {
+  const source = Array.isArray(value) ? value : String(value || '').split(/[,，\n]/);
+  return [...new Set(source.map((tag) => String(tag).trim().slice(0, 40)).filter(Boolean))].slice(0, 20);
+}
+
+const defaultSchedule = { enabled: true, time: '08:10', timezone: 'Asia/Shanghai' };
+
+function safeSchedule(value) {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    const time = typeof parsed.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.time)
+      ? parsed.time
+      : defaultSchedule.time;
+    const timezone = typeof parsed.timezone === 'string' && parsed.timezone.trim()
+      ? parsed.timezone.trim()
+      : defaultSchedule.timezone;
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format();
+    return { enabled: parsed.enabled !== false, time, timezone };
+  } catch {
+    return { ...defaultSchedule };
+  }
+}
+
+async function getSetting(env, key, fallback = '') {
+  const row = await getDb(env).prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();
+  return row?.value ?? fallback;
+}
+
+async function setSetting(env, key, value) {
+  await getDb(env).prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at')
+    .bind(key, value, now()).run();
+}
+
+function safeLogDetails(value, depth = 0) {
+  const blocked = /(session|cookie|clearance|token|secret|password|credential|encryption)/i;
+  if (depth > 3) return '[omitted]';
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => safeLogDetails(item, depth + 1));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !blocked.test(key))
+      .slice(0, 40)
+      .map(([key, item]) => [key, safeLogDetails(item, depth + 1)]));
+  }
+  if (typeof value === 'string') return value.slice(0, 500);
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
+  return String(value).slice(0, 500);
+}
+
+async function writeLog(env, level, category, message, details = {}) {
+  try {
+    await getDb(env).prepare('INSERT INTO event_logs (level, category, message, details, created_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(level, category, String(message).slice(0, 500), JSON.stringify(safeLogDetails(details)).slice(0, 2000), now()).run();
+  } catch {
+    // Logging must not block a successful operation.
+  }
+}
+
+function githubConfig(env) {
+  return {
+    repository: String(env.GITHUB_REPOSITORY || '').trim(),
+    token: String(env.GITHUB_ACTIONS_TOKEN || '').trim(),
+    branch: String(env.GITHUB_BRANCH || 'main').trim() || 'main',
+  };
+}
+
+async function triggerCheckin(env, source = 'manual') {
+  const config = githubConfig(env);
+  if (!config.repository || !config.token) {
+    const message = '未配置 GITHUB_REPOSITORY 或 GITHUB_ACTIONS_TOKEN，无法触发 GitHub Actions';
+    await writeLog(env, 'error', 'checkin', message, { source });
+    return { ok: false, error: message, code: 'GITHUB_DISPATCH_NOT_CONFIGURED' };
+  }
+  if (!/^[^/]+\/[^/]+$/.test(config.repository)) {
+    const message = 'GITHUB_REPOSITORY 格式错误，应为 owner/repository';
+    await writeLog(env, 'error', 'checkin', message, { source });
+    return { ok: false, error: message, code: 'GITHUB_REPOSITORY_INVALID' };
+  }
+
+  try {
+    const response = await fetch('https://api.github.com/repos/' + config.repository + '/actions/workflows/checkin.yml/dispatches', {
+      method: 'POST',
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: 'Bearer ' + config.token,
+        'content-type': 'application/json',
+        'user-agent': 'newapi-checkin-worker',
+        'x-github-api-version': '2022-11-28',
+      },
+      body: JSON.stringify({ ref: config.branch }),
+    });
+    if (!response.ok) {
+      const message = 'GitHub Actions 触发失败（HTTP ' + response.status + '）';
+      await writeLog(env, 'error', 'checkin', message, { source, status: response.status });
+      return { ok: false, error: message, code: 'GITHUB_DISPATCH_FAILED' };
+    }
+    await writeLog(env, 'info', 'checkin', '已触发 GitHub Actions 签到', { source, repository: config.repository, branch: config.branch });
+    return { ok: true, status: 'queued' };
+  } catch (error) {
+    const message = '调用 GitHub Actions 失败：' + (error.message || '网络错误');
+    await writeLog(env, 'error', 'checkin', message, { source });
+    return { ok: false, error: message, code: 'GITHUB_DISPATCH_NETWORK_ERROR' };
+  }
+}
+
+async function scheduledCheckin(env, scheduledTime) {
+  if (!getDb(env)) return;
+  const schedule = safeSchedule(await getSetting(env, 'checkin_schedule', JSON.stringify(defaultSchedule)));
+  if (!schedule.enabled) return;
+  const date = new Date(Number(scheduledTime) || Date.now());
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: schedule.timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  const localMinute = parts.hour + ':' + parts.minute;
+  if (localMinute !== schedule.time) return;
+  const minuteKey = parts.year + '-' + parts.month + '-' + parts.day + 'T' + localMinute;
+  if (await getSetting(env, 'last_scheduled_minute') === minuteKey) return;
+  await setSetting(env, 'last_scheduled_minute', minuteKey);
+  await triggerCheckin(env, 'schedule');
 }
 
 let tablesReady = false;
@@ -98,6 +244,9 @@ async function ensureTables(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       url TEXT NOT NULL,
+      login_url TEXT,
+      group_name TEXT NOT NULL DEFAULT '',
+      tags TEXT NOT NULL DEFAULT '[]',
       secret TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
       failure_count INTEGER NOT NULL DEFAULT 0,
@@ -136,8 +285,26 @@ async function ensureTables(env) {
     )`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_results_run_id ON run_results(run_id)`),
+    db.prepare('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)'),
+    db.prepare('CREATE TABLE IF NOT EXISTS event_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, level TEXT NOT NULL, category TEXT NOT NULL, message TEXT NOT NULL, details TEXT, created_at TEXT NOT NULL)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC)'),
   ]);
-  tablesReady = true;
+ try {
+   await db.prepare('ALTER TABLE accounts ADD COLUMN login_url TEXT').run();
+ } catch {
+   // Existing deployments already have the migration column.
+ }
+  try {
+    await db.prepare("ALTER TABLE accounts ADD COLUMN group_name TEXT NOT NULL DEFAULT ''").run();
+  } catch {
+    // Existing deployments already have the migration column.
+  }
+  try {
+    await db.prepare("ALTER TABLE accounts ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'").run();
+  } catch {
+    // Existing deployments already have the migration column.
+  }
+ tablesReady = true;
 }
 
 async function handler(request, env) {
@@ -193,7 +360,8 @@ async function handler(request, env) {
         const config = JSON.parse(await decrypt(row.secret, env));
         const origin = httpsOrigin(config.url);
         if (!origin) throw new Error(`账号 ${row.id} 的站点 URL 必须更新为 HTTPS 地址`);
-        accounts.push({ ...config, url: origin, name: row.name, account_id: row.id });
+        const { login_url: _loginUrl, ...runnerConfig } = config;
+        accounts.push({ ...runnerConfig, url: origin, name: row.name, account_id: row.id });
       }
       return json({ accounts }, 200, env);
     }
@@ -263,12 +431,38 @@ async function handler(request, env) {
         WHERE id IN (SELECT id FROM updates)`).bind(accountUpdates, createdAt, createdAt));
       }
       const batch = await getDb(env).batch(statements);
+      await writeLog(env, 'info', 'checkin', '已接收签到结果', {
+        execution_time: String(body.execution_time || createdAt).slice(0, 64),
+        total: results.length,
+        success: successCount,
+        failed: results.length - successCount,
+      });
       return json({ ok: true, run_id: batch[0].meta.last_row_id }, 201, env);
     }
   }
 
   if (!getDb(env)) return missingDbError();
   if (!(await requireSession(request, env))) return json({ error: '登录已过期' }, 401, env);
+  if (method === 'GET' && path === '/api/dashboard/schedule') {
+    const config = githubConfig(env);
+    const schedule = safeSchedule(await getSetting(env, 'checkin_schedule', JSON.stringify(defaultSchedule)));
+    return json({ schedule, github_ready: Boolean(config.repository && config.token) }, 200, env);
+  }
+  if (method === 'PATCH' && path === '/api/dashboard/schedule') {
+    const body = await text(request);
+    const schedule = safeSchedule(JSON.stringify(body || {}));
+    await setSetting(env, 'checkin_schedule', JSON.stringify(schedule));
+    await writeLog(env, 'info', 'schedule', '已更新自动签到计划', { enabled: schedule.enabled, time: schedule.time, timezone: schedule.timezone });
+    return json({ ok: true, schedule }, 200, env);
+  }
+  if (method === 'POST' && path === '/api/dashboard/checkin') {
+    const result = await triggerCheckin(env, 'manual');
+    return json(result, result.ok ? 202 : 503, env);
+  }
+  if (method === 'GET' && path === '/api/dashboard/logs') {
+    const rows = await getDb(env).prepare('SELECT id, level, category, message, details, created_at FROM event_logs ORDER BY id DESC LIMIT 100').all();
+    return json({ logs: rows.results }, 200, env);
+  }
   if (method === 'GET' && path === '/api/dashboard/summary') {
     const latest = await getDb(env).prepare('SELECT * FROM runs ORDER BY id DESC LIMIT 1').first();
     const accounts = await getDb(env).prepare('SELECT * FROM accounts ORDER BY id').all();
@@ -298,6 +492,7 @@ async function handler(request, env) {
     return json({
       account: {
         ...accountView(account),
+        login_url: account.login_url || config.login_url || account.url,
         user_id: String(config.user_id || ''),
         has_session: Boolean(config.session),
         has_cf_clearance: Boolean(config.cf_clearance),
@@ -309,13 +504,19 @@ async function handler(request, env) {
   if (method === 'POST' && path === '/api/dashboard/accounts') {
     const body = await text(request);
     const origin = httpsOrigin(body?.url);
-    if (!body?.name || !origin || !body?.session || !body?.user_id) return json({ error: '请填写有效的名称、HTTPS URL、Session 和用户 ID' }, 400, env);
+    const loginUrl = httpsLoginUrl(body?.url);
+    if (!origin || !loginUrl || !body?.session || !body?.user_id) return json({ error: '请填写有效的 HTTPS URL、Session 和用户 ID' }, 400, env);
+    const name = String(body.name || new URL(origin).hostname.replace(/^www[.]/i, '')).trim().slice(0, 100);
+    if (!name) return json({ error: '无法从站点地址生成备注名称' }, 400, env);
     const createdAt = now();
-    const secret = await encrypt(JSON.stringify({ url: origin, session: body.session, user_id: body.user_id, cf_clearance: body.cf_clearance || undefined }), env);
-    const inserted = await getDb(env).prepare(`INSERT INTO accounts (name, url, secret, created_at, updated_at)
-      SELECT ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM accounts WHERE enabled = 1) < 40`)
-      .bind(body.name, origin, secret, createdAt, createdAt).run();
+    const groupName = normalizeGroup(body.group_name);
+    const tags = normalizeTags(body.tags);
+    const secret = await encrypt(JSON.stringify({ url: origin, login_url: loginUrl, session: body.session, user_id: body.user_id, cf_clearance: body.cf_clearance || undefined }), env);
+    const inserted = await getDb(env).prepare(`INSERT INTO accounts (name, url, login_url, group_name, tags, secret, created_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM accounts WHERE enabled = 1) < 40`)
+      .bind(name, origin, loginUrl, groupName, JSON.stringify(tags), secret, createdAt, createdAt).run();
     if (!inserted.meta.changes) return json({ error: '启用账号数量已达到 40 个上限' }, 409, env);
+    await writeLog(env, 'info', 'account', '已添加签到账号', { account_id: inserted.meta.last_row_id, name, url: origin });
     return json({ ok: true }, 201, env);
   }
   if (method === 'DELETE' && path.startsWith('/api/dashboard/accounts/')) {
@@ -326,6 +527,7 @@ async function handler(request, env) {
       getDb(env).prepare('UPDATE run_results SET account_id = NULL WHERE account_id = ?').bind(id),
       getDb(env).prepare('DELETE FROM accounts WHERE id = ?').bind(id),
     ]);
+    await writeLog(env, 'warn', 'account', '已删除签到账号', { account_id: id });
     return json({ ok: true }, 200, env);
   }
   if (method === 'PATCH' && path.startsWith('/api/dashboard/accounts/')) {
@@ -338,16 +540,19 @@ async function handler(request, env) {
 
     const updates = [];
     const hasClearance = Object.prototype.hasOwnProperty.call(body, 'cf_clearance');
+    const hasMetadataUpdate = Object.prototype.hasOwnProperty.call(body, 'group_name') || Object.prototype.hasOwnProperty.call(body, 'tags');
     const hasCredentialUpdate = Boolean(body.session || body.user_id || body.url || hasClearance);
-    if (hasCredentialUpdate) {
+    if (hasCredentialUpdate || hasMetadataUpdate) {
       const current = JSON.parse(await decrypt(account.secret, env));
       const nextUrl = httpsOrigin(body.url || current.url);
-      if (!nextUrl) return json({ error: 'URL 必须是有效的 HTTPS Origin' }, 400, env);
+      const nextLoginUrl = httpsLoginUrl(body.url || current.login_url || current.url);
+      if (!nextUrl || !nextLoginUrl) return json({ error: 'URL 必须是有效的 HTTPS 地址' }, 400, env);
       const nextUserId = String(body.user_id || current.user_id || '').trim();
       if (!nextUserId) return json({ error: '更新凭据时必须填写用户 ID' }, 400, env);
       const next = {
         ...current,
         url: nextUrl,
+        login_url: nextLoginUrl,
         user_id: nextUserId,
       };
       if (body.session) next.session = String(body.session).trim();
@@ -358,8 +563,16 @@ async function handler(request, env) {
       }
       const secret = await encrypt(JSON.stringify(next), env);
       const resetStatus = body.session ? ', failure_count = 0, last_status = NULL, last_message = NULL' : '';
-      updates.push(getDb(env).prepare(`UPDATE accounts SET name = ?, url = ?, secret = ?${resetStatus}, updated_at = ? WHERE id = ?`)
-        .bind(body.name?.trim() || account.name, nextUrl, secret, now(), id));
+      const nextGroup = Object.prototype.hasOwnProperty.call(body, 'group_name')
+        ? normalizeGroup(body.group_name)
+        : (account.group_name || '');
+      const nextTags = Object.prototype.hasOwnProperty.call(body, 'tags')
+        ? normalizeTags(body.tags)
+        : (() => {
+          try { return JSON.parse(account.tags || '[]'); } catch { return []; }
+        })();
+      updates.push(getDb(env).prepare(`UPDATE accounts SET name = ?, url = ?, login_url = ?, group_name = ?, tags = ?, secret = ?${resetStatus}, updated_at = ? WHERE id = ?`)
+        .bind(body.name?.trim() || account.name, nextUrl, nextLoginUrl, nextGroup, JSON.stringify(normalizeTags(nextTags)), secret, now(), id));
     } else if (typeof body.name === 'string' && body.name.trim()) {
       updates.push(getDb(env).prepare('UPDATE accounts SET name = ?, updated_at = ? WHERE id = ?')
         .bind(body.name.trim(), now(), id));
@@ -381,13 +594,14 @@ async function handler(request, env) {
     if (body.enabled === true && !account.enabled && !updated[0].meta.changes) {
       return json({ error: '启用账号数量已达到 40 个上限' }, 409, env);
     }
+    await writeLog(env, 'info', 'account', body.enabled === true ? '已启用签到账号' : body.enabled === false ? '已停用签到账号' : '已更新账号凭据', { account_id: id, name: body.name || account.name, fields: Object.keys(body).filter((key) => !['session', 'cf_clearance'].includes(key)) });
     return json({ ok: true }, 200, env);
   }
   return json({ error: 'Not found' }, 404, env);
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       await ensureTables(env);
       const url = new URL(request.url);
@@ -401,5 +615,9 @@ export default {
     } catch (error) {
       return json({ error: error.message || 'Internal error' }, 500, env);
     }
+  },
+  async scheduled(event, env, ctx) {
+    await ensureTables(env);
+    ctx.waitUntil(scheduledCheckin(env, event.scheduledTime));
   },
 };
