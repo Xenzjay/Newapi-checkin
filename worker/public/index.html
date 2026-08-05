@@ -146,21 +146,24 @@
     .panel-head span { color: var(--muted); font: 11px var(--mono); }
     .panel-body { padding: 18px; }
 
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
     .field { display: grid; gap: 6px; }
-    .field.full { grid-column: 1 / -1; }
+    .field.full { grid-column: auto; }
     .field label { color: var(--muted); font: 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; }
     .field-help { color: #77746b; font-size: 11px; }
-    input {
-      width: 100%;
-      padding: 11px 12px;
-      color: var(--text);
-      background: var(--field);
-      border: 1px solid var(--line);
-      border-radius: 2px;
-      outline: none;
-      transition: border-color .18s, box-shadow .18s;
-    }
+    .field-control-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+   input {
+     width: 100%;
+     padding: 11px 12px;
+     color: var(--text);
+     background: var(--field);
+     border: 1px solid var(--line);
+     border-radius: 2px;
+     outline: none;
+     transition: border-color .18s, box-shadow .18s;
+   }
+    select { width: 100%; min-height: 40px; padding: 9px 12px; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 2px; outline: none; }
+    select:focus { border-color: var(--signal); box-shadow: 0 0 0 3px var(--focus-ring); }
     input:focus { border-color: var(--signal); box-shadow: 0 0 0 3px var(--focus-ring); }
     input::placeholder { color: #66645c; }
     textarea { width: 100%; min-height: 96px; padding: 11px 12px; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 2px; outline: none; resize: vertical; font: 12px/1.45 var(--mono); }
@@ -202,6 +205,17 @@
     .form-submit { width: 100%; margin-top: 14px; }
     .form-buttons { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 14px; }
     .form-buttons .form-submit { margin-top: 0; }
+    .automation-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 24px; }
+    .schedule-form { display: grid; gap: 12px; align-content: start; }
+    .schedule-enabled { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+    .schedule-enabled input { width: 17px; height: 17px; accent-color: var(--signal); }
+    .schedule-meta { color: var(--muted); font: 11px var(--mono); }
+    .automation-run { display: grid; align-content: start; gap: 10px; padding-left: 24px; border-left: 1px solid var(--line); }
+    .automation-run h3 { font-size: 14px; }
+    .automation-run p { color: var(--muted); font-size: 12px; }
+    .automation-status { min-height: 18px; color: var(--muted); font-size: 12px; }
+    .automation-status.good { color: var(--good); }
+    .automation-status.bad { color: var(--bad); }
     [hidden] { display: none !important; }
 
     .security-list { display: grid; gap: 12px; }
@@ -221,6 +235,14 @@
     .account-url, .account-message { display: block; max-width: 360px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .account-url { margin-top: 2px; font-family: var(--mono); }
     .account-message { margin-top: 5px; }
+    .account-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+    .account-group { color: var(--signal); font: 11px var(--mono); }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tag { display: inline-flex; align-items: center; min-height: 20px; padding: 2px 6px; color: var(--text); background: var(--paper-2); border: 1px solid var(--line-bright); border-radius: 2px; font: 10px var(--mono); }
+    .account-filters { display: grid; grid-template-columns: minmax(170px, .7fr) minmax(200px, 1fr) auto; gap: 8px; align-items: end; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--inset); }
+    .account-filters .field { gap: 4px; }
+    .account-filters .field label { font-size: 10px; }
+    .filter-status { color: var(--muted); font: 11px var(--mono); white-space: nowrap; }
     .account-actions { display: grid; grid-template-columns: repeat(2, minmax(92px, 1fr)); align-items: stretch; gap: 6px; min-width: 210px; }
     .account-actions .button { width: 100%; }
     .status { display: inline-flex; align-items: center; gap: 7px; font: 12px var(--mono); }
@@ -261,6 +283,14 @@
     .modal-table .result-message { min-width: 220px; max-width: 360px; white-space: normal; overflow-wrap: anywhere; }
     .modal-empty { padding: 28px 12px; color: var(--muted); text-align: center; }
     .modal-note { margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .logs-list { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); background: var(--line); }
+    .log-item { display: grid; grid-template-columns: 92px 86px minmax(0, 1fr); gap: 12px; padding: 11px 13px; background: var(--paper); font-size: 12px; }
+    .log-time, .log-category { color: var(--muted); font: 11px var(--mono); }
+    .log-level { font: 11px var(--mono); text-transform: uppercase; }
+    .log-level.info { color: var(--good); }
+    .log-level.warn { color: var(--warn); }
+    .log-level.error { color: var(--bad); }
+    .logs-empty { padding: 24px 12px; color: var(--muted); text-align: center; }
 
     .toast { position: fixed; right: 24px; bottom: 24px; z-index: 20; max-width: min(380px, calc(100% - 48px)); padding: 13px 16px; color: var(--ink); background: var(--signal); border-radius: 3px; font-weight: 700; box-shadow: 10px 10px 0 var(--toast-shadow); transform: translateY(120px); opacity: 0; transition: .22s ease; }
     .toast.show { transform: translateY(0); opacity: 1; }
@@ -316,6 +346,12 @@
       .modal-body { padding: 14px; }
       .detail-grid { grid-template-columns: 1fr; }
       .detail-item.full { grid-column: auto; }
+      .automation-grid { grid-template-columns: 1fr; }
+      .automation-run { padding-left: 0; padding-top: 18px; border-top: 1px solid var(--line); border-left: 0; }
+      .field-control-row { grid-template-columns: 1fr; }
+      .account-filters { grid-template-columns: 1fr; align-items: stretch; }
+      .filter-status { white-space: normal; }
+      .log-item { grid-template-columns: 1fr; gap: 3px; }
     }
   </style>
 </head>
@@ -494,6 +530,93 @@
       return result.success ? { label: '成功', className: 'good' } : { label: '失败', className: 'bad' };
     }
 
+    function openSiteLogin(value) {
+      let siteUrl;
+      try {
+        siteUrl = new URL(String(value || '').trim());
+      } catch {
+        throw new Error('请先填写有效的站点地址。');
+      }
+      if (!['http:', 'https:'].includes(siteUrl.protocol) || siteUrl.username || siteUrl.password) {
+        throw new Error('站点地址必须是有效的 HTTP 或 HTTPS 地址。');
+      }
+      siteUrl.search = '';
+      siteUrl.hash = '';
+      const link = document.createElement('a');
+      link.href = siteUrl.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+      return siteUrl.href;
+    }
+
+    function logDetails(log) {
+      let details;
+      try {
+        details = JSON.parse(log.details || '{}');
+      } catch {
+        return '';
+      }
+      if (!details || typeof details !== 'object' || Array.isArray(details)) return '';
+      return Object.entries(details)
+        .filter(([key]) => !/(session|clearance|token|secret|password|credential|encryption)/i.test(key))
+        .map(([key, value]) => {
+          const display = typeof value === 'object' ? JSON.stringify(value) : String(value);
+          return `${key}: ${display}`;
+        })
+        .join(' · ');
+    }
+
+    function renderLogs(logs) {
+      const list = document.querySelector('#logs-list');
+      if (!list) return;
+      if (!logs.length) {
+        list.innerHTML = '<li class="logs-empty">暂无操作日志。</li>';
+        return;
+      }
+      list.innerHTML = logs.map((log) => {
+        const level = ['info', 'warn', 'error'].includes(log.level) ? log.level : 'info';
+        const details = logDetails(log);
+        return `<li class="log-item">
+          <span class="log-time">${escapeHtml(formatTime(log.created_at))}</span>
+          <span class="log-level ${level}">${escapeHtml(log.category || level)}</span>
+          <span><strong>${escapeHtml(log.message || '无消息')}</strong>${details ? `<small class="log-category">${escapeHtml(details)}</small>` : ''}</span>
+        </li>`;
+      }).join('');
+    }
+
+    function setAutomationStatus(message, type = '') {
+      const node = document.querySelector('#automation-status');
+      if (!node) return;
+      node.textContent = message;
+      node.className = `automation-status ${type}`;
+    }
+
+    function setupAccountFilters(accounts) {
+      const groupSelect = document.querySelector('#account-filter-group');
+      const tagInput = document.querySelector('#account-filter-tag');
+      const status = document.querySelector('#filter-status');
+      if (!groupSelect || !tagInput || !status) return;
+      const groups = [...new Set(accounts.map((account) => account.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+      groupSelect.innerHTML = '<option value="">全部分组</option>' + groups.map((group) => '<option value="' + escapeHtml(group) + '">' + escapeHtml(group) + '</option>').join('');
+      const apply = () => {
+        const group = groupSelect.value;
+        const tag = tagInput.value.trim().toLowerCase();
+        let visible = 0;
+        document.querySelectorAll('[data-account-row]').forEach((cell) => {
+          const matchesGroup = !group || cell.dataset.group === group;
+          const matchesTag = !tag || (cell.dataset.tags || '').toLowerCase().split('|').some((item) => item.includes(tag));
+          const row = cell.closest('tr');
+          const shown = matchesGroup && matchesTag;
+          if (row) row.hidden = !shown;
+          if (shown) visible += 1;
+        });
+        status.textContent = '显示 ' + visible + ' / ' + accounts.length + ' 个账号';
+      };
+      groupSelect.addEventListener('change', apply);
+      tagInput.addEventListener('input', apply);
+    }
+
     async function showRun(runId) {
       try {
         const data = await api(`/api/dashboard/runs/${runId}`);
@@ -541,6 +664,8 @@
             <div class="detail-grid">
               <div class="detail-item"><span class="detail-label">备注名称</span><strong class="detail-value">${escapeHtml(account.name)}</strong></div>
               <div class="detail-item"><span class="detail-label">用户 ID</span><strong class="detail-value mono">${escapeHtml(account.user_id || '未提供')}</strong></div>
+              <div class="detail-item"><span class="detail-label">分组</span><strong class="detail-value">${escapeHtml(account.group_name || '未分组')}</strong></div>
+              <div class="detail-item"><span class="detail-label">标签</span><strong class="detail-value">${escapeHtml((account.tags || []).join('、') || '无标签')}</strong></div>
               <div class="detail-item full"><span class="detail-label">站点地址</span><strong class="detail-value mono">${escapeHtml(account.url)}</strong></div>
               <div class="detail-item"><span class="detail-label">Session Cookie</span><strong class="detail-value good">${account.has_session ? '已保存（不显示明文）' : '未保存'}</strong></div>
               <div class="detail-item"><span class="detail-label">cf_clearance</span><strong class="detail-value ${account.has_cf_clearance ? 'good' : 'muted'}">${account.has_cf_clearance ? '已保存（不显示明文）' : '未保存'}</strong></div>
@@ -557,13 +682,17 @@
     async function renderDashboard() {
       app.innerHTML = '<div class="loading">Loading check console...</div>';
       try {
-        const [summary, history] = await Promise.all([
+        const [summary, history, scheduleData, logsData] = await Promise.all([
           api('/api/dashboard/summary'),
           api('/api/dashboard/runs'),
+          api('/api/dashboard/schedule'),
+          api('/api/dashboard/logs'),
         ]);
         const latest = summary.latest || {};
         const accounts = summary.accounts || [];
         const runs = history.runs || [];
+        const schedule = scheduleData.schedule || { enabled: true, time: '08:10', timezone: 'Asia/Shanghai' };
+        const logs = logsData.logs || [];
         const successRate = latest.total ? Math.round((latest.success_count / latest.total) * 100) : 0;
         const healthyAccounts = accounts.filter((account) => account.enabled && account.last_status === 'success').length;
 
@@ -598,6 +727,24 @@
               <article class="metric"><div class="metric-label">最近成功 <span class="metric-index">02</span></div><strong class="good">${escapeHtml(latest.success_count ?? 0)}</strong></article>
               <article class="metric"><div class="metric-label">最近失败 <span class="metric-index">03</span></div><strong class="bad">${escapeHtml(latest.fail_count ?? 0)}</strong></article>
               <article class="metric"><div class="metric-label">成功率 <span class="metric-index">04</span></div><strong>${successRate}%</strong></article>
+            </section>
+
+            <section class="panel automation-panel">
+              <div class="panel-head"><h2>签到计划与运行</h2><span>GITHUB ACTIONS RUNNER</span></div>
+              <div class="panel-body automation-grid">
+                <form id="schedule-form" class="schedule-form">
+                  <label class="schedule-enabled"><input id="schedule-enabled" type="checkbox">启用自动签到</label>
+                  <div class="field"><label for="schedule-time">每日运行时间</label><input id="schedule-time" type="time" value="08:10" required><span class="field-help">按北京时间（Asia/Shanghai）触发，Worker 每分钟检查一次。</span></div>
+                  <div id="schedule-status" class="schedule-meta">正在读取签到计划...</div>
+                  <button class="button small" type="submit">保存自动签到计划</button>
+                </form>
+                <div class="automation-run">
+                  <h3>立即运行一次</h3>
+                  <p>网页会触发 GitHub Actions，实际签到由 Runner 执行，完成后结果会回到本控制台。</p>
+                  <button id="run-checkin-now" class="button" type="button">立即运行签到</button>
+                  <div id="automation-status" class="automation-status"></div>
+                </div>
+              </div>
             </section>
 
             <section class="setup">
@@ -637,9 +784,11 @@
                     <form id="account-form">
                       <input type="hidden" name="account_id" id="account-id">
                       <div class="form-grid">
-                        <div class="field"><label for="name">备注名称</label><input id="name" name="name" placeholder="例如：主力站" required><span class="field-help">仅用于控制台区分账号，可自由填写。</span></div>
+                        <div class="field"><label for="name">备注名称</label><input id="name" name="name" placeholder="留空则使用站点名称"><span class="field-help">仅用于控制台区分账号；留空时自动使用站点域名。</span></div>
                         <div class="field"><label for="user-id">用户 ID</label><input id="user-id" name="user_id" inputmode="numeric" placeholder="浏览器请求头 new-api-user 的值" required><span class="field-help">必填。F12 → Network → 任意 Fetch/XHR 请求头中复制 new-api-user。</span></div>
-                        <div class="field full"><label for="url">站点地址</label><input id="url" name="url" type="url" placeholder="https://api.example.com" required><span class="field-help">填写登录站点的根地址，不包含 /console 或其他页面路径。</span></div>
+                        <div class="field"><label for="group-name">分组</label><input id="group-name" name="group_name" maxlength="80" placeholder="例如：主站 / 生产环境"><span class="field-help">用于归类同一站点的多个账号，或按使用场景区分。</span></div>
+                        <div class="field"><label for="tags">标签</label><input id="tags" name="tags" placeholder="例如：生产，高额度，个人"><span class="field-help">多个标签用逗号分隔，最多 20 个。</span></div>
+                        <div class="field"><label for="url">站点地址</label><div class="field-control-row"><input id="url" name="url" type="url" placeholder="https://api.example.com/console" required><button id="open-site-login" class="button secondary small" type="button">打开站点登录</button></div><span class="field-help">可填写站点根地址或带 /console 的登录页。保存时 Worker 使用站点 Origin 进行签到；登录后用浏览器扩展或油猴脚本导入 Cookie。</span></div>
                         <div class="field full"><label for="session">Session Cookie</label><input id="session" name="session" type="password" placeholder="只粘贴 session 的值" required><span class="field-help">粘贴 Cookie 中 session= 后面的值，不包含 session= 和分号。</span></div>
                         <div class="field full"><label for="clearance">cf_clearance</label><input id="clearance" name="cf_clearance" type="password" placeholder="通常留空"><span class="field-help">只有站点受 Cloudflare 挑战保护且自动回退失败时才需要。</span></div>
                       </div>
@@ -679,6 +828,11 @@
               <div class="stack">
                 <article class="panel">
                   <div class="panel-head"><h2>账号健康状态</h2><span>${accounts.length} ACCOUNTS</span></div>
+                  <div class="account-filters">
+                    <div class="field"><label for="account-filter-group">分组筛选</label><select id="account-filter-group"><option value="">全部分组</option></select></div>
+                    <div class="field"><label for="account-filter-tag">标签筛选</label><input id="account-filter-tag" placeholder="输入一个标签，例如：生产"></div>
+                    <span id="filter-status" class="filter-status">显示全部账号</span>
+                  </div>
                   <div class="table-wrap">
                     ${accounts.length ? `
                       <table>
@@ -686,15 +840,20 @@
                         <tbody>${accounts.map((account) => {
                           const status = accountStatus(account);
                           return `<tr>
-                            <td><span class="account-name">${escapeHtml(account.name)}</span><span class="account-url">${escapeHtml(account.url)}</span><span class="account-message" title="${escapeHtml(account.last_message || '')}">${escapeHtml(account.last_message || '尚无签到结果')}</span></td>
+                            <td data-account-row data-group="${escapeHtml(account.group_name || '')}" data-tags="${escapeHtml((account.tags || []).join('|'))}"><span class="account-name">${escapeHtml(account.name)}</span><span class="account-url">${escapeHtml(account.url)}</span><span class="account-message" title="${escapeHtml(account.last_message || '')}">${escapeHtml(account.last_message || '尚无签到结果')}</span><span class="account-meta">${account.group_name ? `<span class="account-group">${escapeHtml(account.group_name)}</span>` : ''}<span class="tag-list">${(account.tags || []).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</span></span></td>
                             <td><span class="status ${status.className}">${status.label}</span></td>
                             <td><span class="fail-count">${account.failure_count || 0}</span></td>
                             <td><span class="run-time">${formatTime(account.last_checkin_at)}</span></td>
-                            <td><div class="account-actions"><button class="button secondary small account-view" type="button" data-id="${account.id}">查看</button><button class="button secondary small account-edit" type="button" data-id="${account.id}">更新凭据</button><button class="button secondary small account-toggle" type="button" data-id="${account.id}" data-enabled="${account.enabled}">${account.enabled ? '停用' : '启用'}</button><button class="button secondary small account-delete" type="button" data-id="${account.id}">删除</button></div></td>
+                            <td><div class="account-actions"><button class="button secondary small account-login" type="button" data-url="${escapeHtml(account.login_url || account.url)}">登录</button><button class="button secondary small account-view" type="button" data-id="${account.id}">查看</button><button class="button secondary small account-edit" type="button" data-id="${account.id}">更新凭据</button><button class="button secondary small account-toggle" type="button" data-id="${account.id}" data-enabled="${account.enabled}">${account.enabled ? '停用' : '启用'}</button><button class="button secondary small account-delete" type="button" data-id="${account.id}">删除</button></div></td>
                           </tr>`;
                         }).join('')}</tbody>
                       </table>` : '<div class="empty"><strong>还没有签到账号</strong>使用左侧表单添加第一个账号。</div>'}
                   </div>
+                </article>
+
+                <article class="panel">
+                  <div class="panel-head"><h2>操作日志</h2><span>LAST 100 EVENTS</span></div>
+                  <div class="panel-body"><ul id="logs-list" class="logs-list"><li class="logs-empty">正在读取操作日志...</li></ul></div>
                 </article>
 
                 <article class="panel">
@@ -724,6 +883,96 @@
 
         applyTheme(currentTheme());
         document.querySelector('#theme-toggle').addEventListener('click', toggleTheme);
+        setupAccountFilters(accounts);
+
+        document.querySelector('#schedule-enabled').checked = Boolean(schedule.enabled);
+        document.querySelector('#schedule-time').value = schedule.time || '08:10';
+        const scheduleStatus = document.querySelector('#schedule-status');
+        scheduleStatus.textContent = scheduleData.github_ready
+          ? `已加载：${schedule.enabled ? '启用' : '停用'}，每天 ${schedule.time}（${schedule.timezone}）`
+          : '尚未配置 GitHub Actions 触发凭据，请先在 Worker Variables 中添加 GITHUB_REPOSITORY 和 GITHUB_ACTIONS_TOKEN。';
+        renderLogs(logs);
+
+        document.querySelector('#schedule-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const button = event.currentTarget.querySelector('button[type="submit"]');
+          button.disabled = true;
+          button.textContent = '正在保存...';
+          try {
+            const data = await api('/api/dashboard/schedule', {
+              method: 'PATCH',
+              body: JSON.stringify({
+                enabled: document.querySelector('#schedule-enabled').checked,
+                time: document.querySelector('#schedule-time').value,
+                timezone: 'Asia/Shanghai',
+              }),
+            });
+            const saved = data.schedule || schedule;
+            scheduleStatus.textContent = `已保存：${saved.enabled ? '启用' : '停用'}，每天 ${saved.time}（${saved.timezone}）`;
+            showToast('自动签到计划已保存');
+            const refreshedLogs = await api('/api/dashboard/logs');
+            renderLogs(refreshedLogs.logs || []);
+          } catch (error) {
+            scheduleStatus.textContent = error.message;
+            showToast(error.message, true);
+          } finally {
+            button.disabled = false;
+            button.textContent = '保存自动签到计划';
+          }
+        });
+
+        document.querySelector('#run-checkin-now').addEventListener('click', async (event) => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          button.textContent = '正在触发...';
+          setAutomationStatus('正在请求 GitHub Actions...', '');
+          try {
+            const data = await api('/api/dashboard/checkin', { method: 'POST' });
+            setAutomationStatus(data.status === 'queued' ? '已触发，等待 Actions 执行完成。' : '已提交签到任务。', 'good');
+            showToast('已触发 GitHub Actions 签到');
+            const refreshedLogs = await api('/api/dashboard/logs');
+            renderLogs(refreshedLogs.logs || []);
+          } catch (error) {
+            setAutomationStatus(error.message, 'bad');
+            showToast(error.message, true);
+          } finally {
+            button.disabled = false;
+            button.textContent = '立即运行签到';
+          }
+        });
+
+        document.querySelector('#open-site-login').addEventListener('click', () => {
+          try {
+            const openedUrl = openSiteLogin(document.querySelector('#url').value);
+            showToast(`已打开登录页面：${openedUrl}`);
+          } catch (error) {
+            showToast(error.message, true);
+          }
+        });
+
+        document.querySelector('#url').addEventListener('blur', (event) => {
+          const nameInput = document.querySelector('#name');
+          if (nameInput.value.trim()) return;
+          try {
+            const siteUrl = new URL(event.currentTarget.value.trim());
+            if (['http:', 'https:'].includes(siteUrl.protocol)) {
+              nameInput.value = siteUrl.hostname.replace(/^www[.]/i, '');
+            }
+          } catch {
+            // URL validation remains handled by the form and Worker API.
+          }
+        });
+
+        document.querySelectorAll('.account-login').forEach((button) => {
+          button.addEventListener('click', () => {
+            try {
+              const openedUrl = openSiteLogin(button.dataset.url);
+              showToast(`已打开登录页面：${openedUrl}`);
+            } catch (error) {
+              showToast(error.message, true);
+            }
+          });
+        });
 
         document.querySelector('#open-account-import').addEventListener('click', () => {
           const importPanel = document.querySelector('.config-import');
@@ -759,6 +1008,8 @@
           const userId = String(config.userId || config.user_id || '').trim();
           const session = String(config.session || config.sessionCookie || config.session_cookie || '').trim();
           const cfClearance = String(config.cfClearance || config.cf_clearance || '').trim();
+          const groupName = String(config.groupName || config.group_name || '').trim();
+          const tags = Array.isArray(config.tags) ? config.tags.join(', ') : String(config.tags || '').trim();
           let name = String(config.name || '').trim();
 
           if (!siteUrl || !userId || !session) {
@@ -771,6 +1022,8 @@
 
           form.elements.name.value = name;
           form.elements.user_id.value = userId;
+          form.elements.group_name.value = groupName;
+          form.elements.tags.value = tags;
           form.elements.url.value = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl;
           form.elements.session.value = session;
           form.elements.cf_clearance.value = cfClearance;
@@ -809,7 +1062,10 @@
           const payload = Object.fromEntries(new FormData(event.currentTarget));
           const accountId = payload.account_id;
           delete payload.account_id;
-          Object.keys(payload).forEach((field) => { if (!payload[field]) delete payload[field]; });
+          Object.keys(payload).forEach((field) => {
+            const keepEmptyMetadata = accountId && ['group_name', 'tags'].includes(field);
+            if (!payload[field] && !keepEmptyMetadata) delete payload[field];
+          });
           button.disabled = true;
           button.textContent = '正在加密保存...';
           try {
@@ -839,7 +1095,9 @@
               form.elements.account_id.value = account.id;
               form.elements.name.value = account.name || '';
               form.elements.user_id.value = account.user_id || '';
-              form.elements.url.value = account.url || '';
+              form.elements.group_name.value = account.group_name || '';
+              form.elements.tags.value = (account.tags || []).join(', ');
+              form.elements.url.value = account.login_url || account.url || '';
               form.elements.session.value = '';
               form.elements.session.required = false;
               form.elements.cf_clearance.value = '';
