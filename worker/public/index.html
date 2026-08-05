@@ -171,6 +171,7 @@
     .config-import-head strong { font-size: 13px; }
     .config-import-head span { color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; }
     .config-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .config-import-actions > .button { flex: 1 1 150px; }
     .config-import-status { min-height: 18px; margin-top: 7px; color: var(--muted); font-size: 11px; }
     .config-import-status.good { color: var(--good); }
     .config-import-status.bad { color: var(--bad); }
@@ -220,6 +221,8 @@
     .account-url, .account-message { display: block; max-width: 360px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .account-url { margin-top: 2px; font-family: var(--mono); }
     .account-message { margin-top: 5px; }
+    .account-actions { display: grid; grid-template-columns: repeat(2, minmax(92px, 1fr)); align-items: stretch; gap: 6px; min-width: 210px; }
+    .account-actions .button { width: 100%; }
     .status { display: inline-flex; align-items: center; gap: 7px; font: 12px var(--mono); }
     .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
     .status.good { color: var(--good); }
@@ -235,6 +238,29 @@
     .run-time { font-family: var(--mono); font-size: 12px; }
     .number-good { color: var(--good); font-family: var(--mono); }
     .number-bad { color: var(--bad); font-family: var(--mono); }
+
+    .modal-root { position: relative; z-index: 30; }
+    .modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(10, 12, 14, .68); }
+    .modal { width: min(760px, 100%); max-height: min(720px, calc(100vh - 48px)); overflow: auto; border: 1px solid var(--line-bright); background: var(--paper); box-shadow: 14px 14px 0 rgba(0, 0, 0, .22); }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { font-size: 17px; }
+    .modal-head p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .modal-close { flex: 0 0 auto; min-width: 34px; }
+    .modal-body { padding: 20px; }
+    .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
+    .detail-item { min-width: 0; padding: 13px 14px; background: var(--paper); }
+    .detail-item.full { grid-column: 1 / -1; }
+    .detail-label { display: block; color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+    .detail-value { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+    .detail-value.good { color: var(--good); }
+    .detail-value.bad { color: var(--bad); }
+    .detail-value.muted { color: var(--muted); }
+    .modal-table-wrap { margin-top: 16px; overflow-x: auto; border: 1px solid var(--line); }
+    .modal-table th, .modal-table td { padding: 12px; }
+    .modal-table .result-site { min-width: 150px; }
+    .modal-table .result-message { min-width: 220px; max-width: 360px; white-space: normal; overflow-wrap: anywhere; }
+    .modal-empty { padding: 28px 12px; color: var(--muted); text-align: center; }
+    .modal-note { margin-top: 14px; color: var(--muted); font-size: 12px; }
 
     .toast { position: fixed; right: 24px; bottom: 24px; z-index: 20; max-width: min(380px, calc(100% - 48px)); padding: 13px 16px; color: var(--ink); background: var(--signal); border-radius: 3px; font-weight: 700; box-shadow: 10px 10px 0 var(--toast-shadow); transform: translateY(120px); opacity: 0; transition: .22s ease; }
     .toast.show { transform: translateY(0); opacity: 1; }
@@ -286,15 +312,21 @@
       th, td { padding: 12px; }
       .login-story { padding: 34px 24px; }
       .login-box { padding: 34px 24px; }
+      .modal-backdrop { padding: 12px; }
+      .modal-body { padding: 14px; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .detail-item.full { grid-column: auto; }
     }
   </style>
 </head>
 <body>
   <main id="app"></main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="modal-root" class="modal-root"></div>
   <script>
     const app = document.querySelector('#app');
     const toastNode = document.querySelector('#toast');
+    const modalRoot = document.querySelector('#modal-root');
     const tokenKey = 'check_console_token';
     const expiryKey = 'check_console_expiry';
     const themeKey = 'check_console_theme';
@@ -432,11 +464,91 @@
       return { label: '等待首跑', className: '' };
     }
 
+    function closeModal() {
+      modalRoot.innerHTML = '';
+      document.removeEventListener('keydown', handleModalKeydown);
+    }
+
+    function handleModalKeydown(event) {
+      if (event.key === 'Escape') closeModal();
+    }
+
+    function openModal(content) {
+      modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true">${content}</section></div>`;
+      modalRoot.querySelector('[data-modal-backdrop]').addEventListener('click', (event) => {
+        if (event.target === event.currentTarget) closeModal();
+      });
+      modalRoot.querySelector('.modal-close')?.addEventListener('click', closeModal);
+      document.addEventListener('keydown', handleModalKeydown);
+      modalRoot.querySelector('.modal-close')?.focus();
+    }
+
+    function formatQuota(value) {
+      if (value === null || value === undefined || value === '') return '未提供';
+      const number = Number(value);
+      if (!Number.isFinite(number)) return String(value);
+      return `${number.toLocaleString('zh-CN')} tokens`;
+    }
+
+    function resultStatus(result) {
+      return result.success ? { label: '成功', className: 'good' } : { label: '失败', className: 'bad' };
+    }
+
     async function showRun(runId) {
       try {
         const data = await api(`/api/dashboard/runs/${runId}`);
-        const lines = (data.results || []).map((result) => `${result.success ? '成功' : '失败'} · ${result.name} · ${result.message || '无详情'}`);
-        showToast(lines.length ? lines.join('  |  ') : '该次运行没有账号明细');
+        const run = data.run || {};
+        const results = data.results || [];
+        const resultRows = results.map((result) => {
+          const status = resultStatus(result);
+          return `<tr>
+            <td class="result-site"><strong>${escapeHtml(result.name || '未知站点')}</strong><span class="account-url">${escapeHtml(result.account_url || '站点地址不可用')}</span></td>
+            <td><span class="status ${status.className}">${status.label}</span></td>
+            <td class="mono">${escapeHtml(formatQuota(result.quota_awarded))}</td>
+            <td class="mono">${result.checkin_count === null || result.checkin_count === undefined ? '未提供' : escapeHtml(result.checkin_count)}</td>
+            <td><span class="detail-value ${result.session_expired ? 'bad' : 'good'}">${result.session_expired ? 'Session 需更新' : '正常'}</span></td>
+            <td><span class="result-message">${escapeHtml(result.message || '无返回消息')}</span></td>
+          </tr>`;
+        }).join('');
+        openModal(`
+          <div class="modal-head">
+            <div><h2>签到运行详情</h2><p>${escapeHtml(run.execution_time || '未知执行时间')}</p></div>
+            <button class="button secondary small modal-close" type="button" aria-label="关闭详情">关闭</button>
+          </div>
+          <div class="modal-body">
+            <div class="detail-grid">
+              <div class="detail-item"><span class="detail-label">站点总数</span><strong class="detail-value">${escapeHtml(run.total ?? results.length)}</strong></div>
+              <div class="detail-item"><span class="detail-label">成功 / 失败</span><strong class="detail-value"><span class="number-good">${escapeHtml(run.success_count ?? 0)}</span> / <span class="number-bad">${escapeHtml(run.fail_count ?? 0)}</span></strong></div>
+            </div>
+            ${results.length ? `<div class="modal-table-wrap"><table class="modal-table"><thead><tr><th>站点名称 / 地址</th><th>签到状态</th><th>获得额度</th><th>连续签到</th><th>认证状态</th><th>返回信息</th></tr></thead><tbody>${resultRows}</tbody></table></div>` : '<div class="modal-empty">该次运行没有账号明细。</div>'}
+            <p class="modal-note">额度来源于签到接口的 <code>quota_awarded</code> 字段；站点未返回该字段时显示“未提供”。</p>
+          </div>`);
+      } catch (error) {
+        showToast(error.message, true);
+      }
+    }
+
+    async function showAccountDetail(accountId) {
+      try {
+        const data = await api(`/api/dashboard/accounts/${accountId}`);
+        const account = data.account || {};
+        openModal(`
+          <div class="modal-head">
+            <div><h2>账号凭据详情</h2><p>${escapeHtml(account.name || '未知账号')}</p></div>
+            <button class="button secondary small modal-close" type="button" aria-label="关闭详情">关闭</button>
+          </div>
+          <div class="modal-body">
+            <div class="detail-grid">
+              <div class="detail-item"><span class="detail-label">备注名称</span><strong class="detail-value">${escapeHtml(account.name)}</strong></div>
+              <div class="detail-item"><span class="detail-label">用户 ID</span><strong class="detail-value mono">${escapeHtml(account.user_id || '未提供')}</strong></div>
+              <div class="detail-item full"><span class="detail-label">站点地址</span><strong class="detail-value mono">${escapeHtml(account.url)}</strong></div>
+              <div class="detail-item"><span class="detail-label">Session Cookie</span><strong class="detail-value good">${account.has_session ? '已保存（不显示明文）' : '未保存'}</strong></div>
+              <div class="detail-item"><span class="detail-label">cf_clearance</span><strong class="detail-value ${account.has_cf_clearance ? 'good' : 'muted'}">${account.has_cf_clearance ? '已保存（不显示明文）' : '未保存'}</strong></div>
+              <div class="detail-item"><span class="detail-label">当前状态</span><strong class="detail-value">${account.enabled ? '已启用' : '已停用'}</strong></div>
+              <div class="detail-item"><span class="detail-label">最近更新</span><strong class="detail-value mono">${escapeHtml(formatTime(account.updated_at))}</strong></div>
+            </div>
+            <p class="modal-note">Session 和 cf_clearance 只允许重新录入或删除，不在控制台回显明文。</p>
+          </div>`);
       } catch (error) {
         showToast(error.message, true);
       }
@@ -515,10 +627,9 @@
                   <div class="panel-body">
                     <div class="config-import">
                       <div class="config-import-head"><strong>一键导入完整配置</strong><span>PASTE JSON</span></div>
-                      <textarea id="account-import" placeholder="点击“从剪贴板导入”，或把 Edge 扩展复制的完整 JSON 粘贴到这里"></textarea>
+                      <textarea id="account-import" aria-label="完整账号配置 JSON" placeholder="点击“从剪贴板导入”，或直接在这里粘贴 Edge 扩展复制的完整 JSON"></textarea>
                       <div class="config-import-actions">
                         <button class="button secondary small" type="button" id="import-account-config">从剪贴板导入</button>
-                        <button class="button secondary small" type="button" id="apply-account-config">应用文本配置</button>
                         <button class="button secondary small" type="button" id="clear-account-import">清空</button>
                       </div>
                       <p id="account-import-status" class="config-import-status">导入后会自动填充下方字段，确认无误后再点击加密保存。</p>
@@ -579,7 +690,7 @@
                             <td><span class="status ${status.className}">${status.label}</span></td>
                             <td><span class="fail-count">${account.failure_count || 0}</span></td>
                             <td><span class="run-time">${formatTime(account.last_checkin_at)}</span></td>
-                            <td><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="button secondary small account-edit" data-id="${account.id}" data-name="${escapeHtml(account.name)}" data-url="${escapeHtml(account.url)}">更新凭据</button><button class="button secondary small account-toggle" data-id="${account.id}" data-enabled="${account.enabled}">${account.enabled ? '停用' : '启用'}</button></div></td>
+                            <td><div class="account-actions"><button class="button secondary small account-view" type="button" data-id="${account.id}">查看</button><button class="button secondary small account-edit" type="button" data-id="${account.id}">更新凭据</button><button class="button secondary small account-toggle" type="button" data-id="${account.id}" data-enabled="${account.enabled}">${account.enabled ? '停用' : '启用'}</button><button class="button secondary small account-delete" type="button" data-id="${account.id}">删除</button></div></td>
                           </tr>`;
                         }).join('')}</tbody>
                       </table>` : '<div class="empty"><strong>还没有签到账号</strong>使用左侧表单添加第一个账号。</div>'}
@@ -592,7 +703,7 @@
                     ${runs.length ? `
                       <table>
                         <thead><tr><th>执行时间</th><th>成功</th><th>失败</th><th>总数</th><th>详情</th></tr></thead>
-                        <tbody>${runs.map((run) => `<tr class="run-row" data-run-id="${escapeHtml(run.id)}"><td><span class="run-time">${escapeHtml(run.execution_time)}</span></td><td class="number-good">${escapeHtml(run.success_count)}</td><td class="number-bad">${escapeHtml(run.fail_count)}</td><td class="mono">${escapeHtml(run.total)}</td><td><button class="button secondary small">查看</button></td></tr>`).join('')}</tbody>
+                        <tbody>${runs.map((run) => `<tr><td><span class="run-time">${escapeHtml(run.execution_time)}</span></td><td class="number-good">${escapeHtml(run.success_count)}</td><td class="number-bad">${escapeHtml(run.fail_count)}</td><td class="mono">${escapeHtml(run.total)}</td><td><button class="button secondary small run-view" type="button" data-run-id="${escapeHtml(run.id)}">查看</button></td></tr>`).join('')}</tbody>
                       </table>` : '<div class="empty"><strong>等待第一次运行</strong>手动触发 GitHub Actions 后，结果会出现在这里。</div>'}
                   </div>
                 </article>
@@ -673,16 +784,18 @@
             document.querySelector('#account-import').value = raw;
             applyImportedConfig(raw);
           } catch (error) {
-            setImportStatus(error.message || '无法读取剪贴板，请改用“应用文本配置”。', 'bad');
+            setImportStatus(error.message || '无法读取剪贴板，请直接粘贴 JSON。', 'bad');
           }
         });
 
-        document.querySelector('#apply-account-config').addEventListener('click', () => {
-          try {
-            applyImportedConfig(document.querySelector('#account-import').value.trim());
-          } catch (error) {
-            setImportStatus(error.message || '导入失败。', 'bad');
-          }
+        document.querySelector('#account-import').addEventListener('paste', () => {
+          window.setTimeout(() => {
+            try {
+              applyImportedConfig(document.querySelector('#account-import').value.trim());
+            } catch (error) {
+              setImportStatus(error.message || '导入失败，请检查 JSON。', 'bad');
+            }
+          }, 0);
         });
 
         document.querySelector('#clear-account-import').addEventListener('click', () => {
@@ -713,17 +826,30 @@
           }
         });
 
+        document.querySelectorAll('.account-view').forEach((button) => {
+          button.addEventListener('click', () => showAccountDetail(button.dataset.id));
+        });
+
         document.querySelectorAll('.account-edit').forEach((button) => {
-          button.addEventListener('click', () => {
-            const form = document.querySelector('#account-form');
-            form.elements.account_id.value = button.dataset.id;
-            form.elements.name.value = button.dataset.name;
-            form.elements.url.value = button.dataset.url;
-            form.elements.session.value = '';
-            form.querySelector('button[type="submit"]').textContent = '加密更新凭据';
-            document.querySelector('#cancel-edit').hidden = false;
-            form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            form.elements.session.focus({ preventScroll: true });
+          button.addEventListener('click', async () => {
+            try {
+              const data = await api(`/api/dashboard/accounts/${button.dataset.id}`);
+              const account = data.account;
+              const form = document.querySelector('#account-form');
+              form.elements.account_id.value = account.id;
+              form.elements.name.value = account.name || '';
+              form.elements.user_id.value = account.user_id || '';
+              form.elements.url.value = account.url || '';
+              form.elements.session.value = '';
+              form.elements.session.required = false;
+              form.elements.cf_clearance.value = '';
+              form.querySelector('button[type="submit"]').textContent = '加密更新凭据';
+              document.querySelector('#cancel-edit').hidden = false;
+              form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              form.elements.session.focus({ preventScroll: true });
+            } catch (error) {
+              showToast(error.message, true);
+            }
           });
         });
 
@@ -731,6 +857,7 @@
           const form = document.querySelector('#account-form');
           form.reset();
           form.elements.account_id.value = '';
+          form.elements.session.required = true;
           form.querySelector('button[type="submit"]').textContent = '加密保存账号';
           document.querySelector('#cancel-edit').hidden = true;
         });
@@ -750,8 +877,21 @@
           });
         });
 
-        document.querySelectorAll('.run-row').forEach((row) => {
-          row.addEventListener('click', () => showRun(row.dataset.runId));
+        document.querySelectorAll('.account-delete').forEach((button) => {
+          button.addEventListener('click', async () => {
+            if (!window.confirm('确定删除这个账号凭据吗？删除后将无法恢复，但运行历史会保留。')) return;
+            try {
+              await api(`/api/dashboard/accounts/${button.dataset.id}`, { method: 'DELETE' });
+              showToast('账号凭据已删除');
+              await renderDashboard();
+            } catch (error) {
+              showToast(error.message, true);
+            }
+          });
+        });
+
+        document.querySelectorAll('.run-view').forEach((button) => {
+          button.addEventListener('click', () => showRun(button.dataset.runId));
         });
       } catch (error) {
         if (error.message !== '登录状态已过期') {
